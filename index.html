@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AIVA: Laberinto del Saber</title>
+    <!-- Bibliotecas de React -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel para compilar JSX en el navegador -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tailwind CSS para los estilos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { touch-action: none; /* Previene hacer zoom con doble toque en celulares */ }
+        canvas { touch-action: none; }
+    </style>
+</head>
+<body class="bg-slate-900 text-white font-sans overflow-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // --- ICONOS SVG ---
+        const Icon = ({ path, className }) => (
+            <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d={path} />
+            </svg>
+        );
+        const Play = () => <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>;
+        const Pause = () => <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>;
+        const LogOut = () => <Icon className="w-6 h-6" path="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9" />;
+        const Info = () => <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>;
+        const ArrowUp = () => <Icon className="w-8 h-8 text-white" path="M12 19V5 M5 12l7-7 7 7" />;
+        const ArrowDown = () => <Icon className="w-8 h-8 text-white" path="M12 5v14 M19 12l-7 7-7-7" />;
+        const ArrowLeft = () => <Icon className="w-8 h-8 text-white" path="M19 12H5 M12 19l-7-7 7-7" />;
+        const ArrowRight = () => <Icon className="w-8 h-8 text-white" path="M5 12h14 M12 5l7 7-7 7" />;
+
+        // --- BANCO DE PREGUNTAS ---
+        const QUESTIONS = {
+          matematicas: [
+            { q: "¿Cuánto es 1 + 1?", options: ["1", "2", "3"], a: "2" },
+            { q: "¿Cuánto es 2 + 2?", options: ["3", "4", "5"], a: "4" },
+            { q: "Si tengo 1 manzana y me dan 2, ¿cuántas tengo?", options: ["2", "3", "4"], a: "3" },
+            { q: "¿Qué número va antes del 5?", options: ["4", "6", "3"], a: "4" },
+            { q: "¿Cuánto es 5 - 1?", options: ["3", "4", "5"], a: "4" },
+            { q: "¿Qué número es mayor?", options: ["7", "3", "5"], a: "7" },
+            { q: "¿Cuánto es 3 + 4?", options: ["6", "7", "8"], a: "7" },
+            { q: "Si tengo 5 dulces y me como 2, ¿cuántos quedan?", options: ["2", "3", "4"], a: "3" },
+            { q: "¿Qué número sigue? 1, 2, 3, ___", options: ["4", "5", "6"], a: "4" },
+            { q: "¿Cuánto es 10 - 5?", options: ["4", "5", "6"], a: "5" },
+            { q: "¿Cuánto es 8 + 2?", options: ["9", "10", "11"], a: "10" },
+            { q: "¿Qué número sigue? 2, 4, 6, ___", options: ["7", "8", "9"], a: "8" },
+            { q: "¿Cuánto es 10 + 5?", options: ["14", "15", "16"], a: "15" },
+            { q: "¿Cuánto es 12 - 4?", options: ["7", "8", "9"], a: "8" },
+            { q: "Un triángulo tiene ___ lados.", options: ["2", "3", "4"], a: "3" },
+            { q: "¿Cuánto es 7 + 6?", options: ["12", "13", "14"], a: "13" },
+            { q: "¿Qué número es una decena?", options: ["1", "5", "10"], a: "10" },
+            { q: "¿Cuánto es 20 - 10?", options: ["5", "10", "15"], a: "10" },
+            { q: "¿Cuánto es 15 + 15?", options: ["20", "25", "30"], a: "30" },
+            { q: "Un cuadrado tiene ___ lados iguales.", options: ["3", "4", "5"], a: "4" },
+            { q: "¿Cuánto es 2 x 2?", options: ["2", "4", "6"], a: "4" },
+            { q: "¿Cuánto es 3 x 3?", options: ["6", "9", "12"], a: "9" },
+            { q: "¿La mitad de 10 es?", options: ["4", "5", "6"], a: "5" },
+            { q: "¿El doble de 4 es?", options: ["6", "8", "10"], a: "8" },
+            { q: "¿Cuánto es 5 x 2?", options: ["10", "15", "20"], a: "10" },
+            { q: "¿Cuánto es 25 + 12?", options: ["35", "37", "39"], a: "37" },
+            { q: "¿Cuánto es 50 - 25?", options: ["20", "25", "30"], a: "25" },
+            { q: "¿Qué número sigue? 5, 10, 15, ___", options: ["20", "25", "30"], a: "20" },
+            { q: "¿Cuánto es 4 x 4?", options: ["12", "16", "20"], a: "16" },
+            { q: "¿La mitad de 20 es?", options: ["5", "10", "15"], a: "10" },
+            { q: "¿Cuánto es 6 x 5?", options: ["25", "30", "35"], a: "30" },
+            { q: "¿Cuánto es 7 x 3?", options: ["18", "21", "24"], a: "21" },
+            { q: "¿Cuánto es 100 - 45?", options: ["45", "55", "65"], a: "55" },
+            { q: "Si divido 12 entre 2, ¿da?", options: ["4", "6", "8"], a: "6" },
+            { q: "¿Cuánto es 8 x 4?", options: ["24", "32", "36"], a: "32" },
+            { q: "¿Qué número sigue? 10, 20, 30, ___", options: ["40", "50", "60"], a: "40" },
+            { q: "¿Cuánto es 50 + 75?", options: ["115", "125", "135"], a: "125" },
+            { q: "¿El triple de 5 es?", options: ["10", "15", "20"], a: "15" },
+            { q: "Si divido 15 entre 3, ¿da?", options: ["4", "5", "6"], a: "5" },
+            { q: "¿Cuánto es 9 x 2?", options: ["16", "18", "20"], a: "18" },
+            { q: "¿Cuánto es 7 x 8?", options: ["54", "56", "64"], a: "56" },
+            { q: "¿Cuánto es 9 x 9?", options: ["72", "81", "90"], a: "81" },
+            { q: "Si divido 24 entre 4, ¿da?", options: ["6", "7", "8"], a: "6" },
+            { q: "¿Cuánto es 120 + 85?", options: ["195", "205", "215"], a: "205" },
+            { q: "¿El perímetro de un cuadrado de lado 5 es?", options: ["10", "15", "20"], a: "20" },
+            { q: "¿Cuánto es un cuarto (1/4) de 40?", options: ["10", "15", "20"], a: "10" },
+            { q: "¿Qué número sigue? 2, 4, 8, 16, ___", options: ["24", "32", "64"], a: "32" },
+            { q: "¿Cuánto es 15 x 3?", options: ["35", "40", "45"], a: "45" },
+            { q: "Si divido 36 entre 6, ¿da?", options: ["5", "6", "7"], a: "6" },
+            { q: "¿Cuánto es 1000 - 250?", options: ["650", "750", "850"], a: "750" }
+          ],
+          comunicacion: [
+            { q: "¿Cuál es una vocal?", options: ["B", "E", "M"], a: "E" },
+            { q: "¿Con qué letra empieza 'Avión'?", options: ["A", "E", "O"], a: "A" },
+            { q: "¿Cuántas sílabas tiene 'Sol'?", options: ["1", "2", "3"], a: "1" },
+            { q: "¿Cómo hace el perro?", options: ["Miau", "Guau", "Pío"], a: "Guau" },
+            { q: "¿Con qué letra empieza 'Gato'?", options: ["J", "G", "C"], a: "G" },
+            { q: "¿Cuál es una consonante?", options: ["A", "I", "P"], a: "P" },
+            { q: "¿Cuántas sílabas tiene 'Ma-má'?", options: ["1", "2", "3"], a: "2" },
+            { q: "¿Qué palabra es un animal?", options: ["Mesa", "Perro", "Silla"], a: "Perro" },
+            { q: "¿Con qué letra termina 'Luz'?", options: ["S", "Z", "C"], a: "Z" },
+            { q: "¿Cuántas sílabas tiene 'Pan'?", options: ["1", "2", "3"], a: "1" },
+            { q: "¿Sinónimo de 'Feliz'?", options: ["Triste", "Contento", "Enojado"], a: "Contento" },
+            { q: "¿Antónimo de 'Día'?", options: ["Tarde", "Luz", "Noche"], a: "Noche" },
+            { q: "¿Cuál es la forma correcta?", options: ["Vaca", "Baca", "Vaka"], a: "Vaca" },
+            { q: "¿Cuántas sílabas tiene 'Pe-lo-ta'?", options: ["2", "3", "4"], a: "3" },
+            { q: "¿Sinónimo de 'Grande'?", options: ["Enorme", "Pequeño", "Largo"], a: "Enorme" },
+            { q: "¿Antónimo de 'Frío'?", options: ["Hielo", "Calor", "Lluvia"], a: "Calor" },
+            { q: "¿Qué palabra nombra un color?", options: ["Cielo", "Azul", "Nube"], a: "Azul" },
+            { q: "¿Cuál es la forma correcta?", options: ["Huevo", "Uevo", "Guevo"], a: "Huevo" },
+            { q: "¿Cuántas sílabas tiene 'Es-cue-la'?", options: ["2", "3", "4"], a: "3" },
+            { q: "¿Antónimo de 'Lleno'?", options: ["Vacío", "Completo", "Mucho"], a: "Vacío" },
+            { q: "¿Qué palabra es un verbo (acción)?", options: ["Mesa", "Correr", "Azul"], a: "Correr" },
+            { q: "¿Qué palabra es un sustantivo (cosa)?", options: ["Saltar", "Pelota", "Rápido"], a: "Pelota" },
+            { q: "¿Qué palabra es un adjetivo (cualidad)?", options: ["Cantar", "Perro", "Bonito"], a: "Bonito" },
+            { q: "¿Cuál es el sujeto en: 'El gato duerme'?", options: ["duerme", "El", "El gato"], a: "El gato" },
+            { q: "¿Sinónimo de 'Rápido'?", options: ["Lento", "Veloz", "Pausado"], a: "Veloz" },
+            { q: "¿Cómo se escribe?", options: ["Zapato", "Sapato", "Capato"], a: "Zapato" },
+            { q: "¿Qué verbo está en pasado?", options: ["Canto", "Cantaré", "Canté"], a: "Canté" },
+            { q: "¿Qué verbo está en futuro?", options: ["Comí", "Comeré", "Como"], a: "Comeré" },
+            { q: "¿Cuántas sílabas tiene 'Muñeca'?", options: ["2", "3", "4"], a: "3" },
+            { q: "¿Cómo se escribe?", options: ["Yave", "Llave", "Iabe"], a: "Llave" },
+            { q: "¿Palabra aguda (acento en última sílaba)?", options: ["Reloj", "Árbol", "Pájaro"], a: "Reloj" },
+            { q: "¿Palabra grave (acento en penúltima)?", options: ["Camión", "Casa", "Médico"], a: "Casa" },
+            { q: "¿Palabra esdrújula (acento en antepenúltima)?", options: ["Teléfono", "Papel", "Mesa"], a: "Teléfono" },
+            { q: "¿Cuál es el predicado en: 'Juan come pan'?", options: ["Juan", "come", "come pan"], a: "come pan" },
+            { q: "¿Qué palabra tiene diptongo?", options: ["Caer", "Ciudad", "León"], a: "Ciudad" },
+            { q: "¿Cómo se escribe?", options: ["Brazos", "Vrazos", "Brasos"], a: "Brazos" },
+            { q: "¿Sinónimo de 'Ocultar'?", options: ["Mostrar", "Esconder", "Buscar"], a: "Esconder" },
+            { q: "¿Antónimo de 'Valiente'?", options: ["Cobarde", "Fuerte", "Héroe"], a: "Cobarde" },
+            { q: "¿Qué palabra es un artículo?", options: ["Casa", "La", "Grande"], a: "La" },
+            { q: "¿Cómo se escribe?", options: ["Ombre", "Hombre", "Honbre"], a: "Hombre" },
+            { q: "Identifica el adjetivo: 'La noche oscura'", options: ["La", "noche", "oscura"], a: "oscura" },
+            { q: "¿Qué palabra lleva tilde?", options: ["Cancion", "Mesa", "Libro"], a: "Canción" },
+            { q: "Femenino de 'Actor'", options: ["Actora", "Actriz", "Actrizadora"], a: "Actriz" },
+            { q: "Plural de 'Pez'", options: ["Pezes", "Peces", "Pezs"], a: "Peces" },
+            { q: "¿Palabra aguda con tilde?", options: ["Correr", "Sofá", "Pared"], a: "Sofá" },
+            { q: "¿Cómo se escribe?", options: ["Hacer", "Acer", "Haser"], a: "Hacer" },
+            { q: "¿Qué signo indica pregunta?", options: ["¡ !", "¿ ?", "( )"], a: "¿ ?" },
+            { q: "¿Qué es 'Nosotros'?", options: ["Verbo", "Pronombre", "Adjetivo"], a: "Pronombre" },
+            { q: "Sinónimo de 'Comenzar'", options: ["Terminar", "Iniciar", "Pausar"], a: "Iniciar" },
+            { q: "¿Qué oración es exclamativa?", options: ["¿Cómo estás?", "¡Qué susto!", "Tengo frío."], a: "¡Qué susto!" }
+          ],
+          costa: [
+            { q: "¿Qué océano baña la costa del Perú?", options: ["Atlántico", "Pacífico", "Índico"], a: "Pacífico" },
+            { q: "¿Qué baile es típico de la costa peruana?", options: ["Huayno", "Marinera", "Pandilla"], a: "Marinera" },
+            { q: "¿Qué animal marino es común en Paracas?", options: ["Oso", "Lobo Marino", "Cóndor"], a: "Lobo Marino" },
+            { q: "¿Cuál es la capital del Perú, ubicada en la costa?", options: ["Cusco", "Arequipa", "Lima"], a: "Lima" },
+            { q: "¿Qué plato típico se hace con pescado crudo y limón?", options: ["Ceviche", "Pachamanca", "Juane"], a: "Ceviche" },
+            { q: "¿Cómo es el clima en la mayor parte de la costa peruana?", options: ["Lluvioso", "Desértico", "Nevado"], a: "Desértico" },
+            { q: "¿Qué ave guanera es famosa en la costa?", options: ["Pelícano", "Gallito", "Tucán"], a: "Pelícano" },
+            { q: "¿Qué cultura preinca hizo las famosas Líneas en el desierto?", options: ["Inca", "Nazca", "Chavín"], a: "Nazca" },
+            { q: "¿De qué color se pinta el mapa del Perú en la zona de la costa?", options: ["Verde", "Marrón", "Amarillo"], a: "Amarillo" },
+            { q: "¿Qué postre es limeño y lleva manjar blanco?", options: ["Suspiro a la Limeña", "Helado", "Gelatina"], a: "Suspiro a la Limeña" }
+          ],
+          sierra: [
+            { q: "¿Qué cordillera atraviesa la sierra del Perú?", options: ["Alpes", "Himalaya", "De los Andes"], a: "De los Andes" },
+            { q: "¿Qué animal de carga es símbolo de la sierra?", options: ["Caballo", "Llama", "Elefante"], a: "Llama" },
+            { q: "¿Qué maravilla del mundo está en Cusco?", options: ["Pirámides", "Machu Picchu", "Coliseo"], a: "Machu Picchu" },
+            { q: "¿Cuál es el lago navegable más alto del mundo?", options: ["Titicaca", "Victoria", "Mar Muerto"], a: "Titicaca" },
+            { q: "¿Qué alimento originario de la sierra tiene miles de variedades?", options: ["Arroz", "Papa", "Trigo"], a: "Papa" },
+            { q: "¿Qué ave majestuosa vuela por los Andes?", options: ["Águila", "Cóndor", "Halcón"], a: "Cóndor" },
+            { q: "¿Qué fiesta importante se celebra en Cusco para el Sol?", options: ["Inti Raymi", "Navidad", "Carnaval"], a: "Inti Raymi" },
+            { q: "¿De qué color se pinta el mapa del Perú en la sierra?", options: ["Azul", "Marrón", "Amarillo"], a: "Marrón" },
+            { q: "¿Qué plato típico se cocina bajo tierra con piedras calientes?", options: ["Ceviche", "Pachamanca", "Tacacho"], a: "Pachamanca" },
+            { q: "¿Cómo es el clima en las zonas muy altas de la sierra?", options: ["Caluroso", "Templado", "Muy frío"], a: "Muy frío" }
+          ],
+          selva: [
+            { q: "¿Qué río inmenso cruza la selva peruana?", options: ["Rímac", "Amazonas", "Ucayali"], a: "Amazonas" },
+            { q: "¿De qué color se pinta el mapa del Perú en la selva?", options: ["Verde", "Rojo", "Marrón"], a: "Verde" },
+            { q: "¿Qué plato típico se envuelve en hojas de bijao?", options: ["Juane", "Ceviche", "Lomo Saltado"], a: "Juane" },
+            { q: "¿Cuál es el ave nacional del Perú que vive en la selva?", options: ["Cóndor", "Gallito de las Rocas", "Pingüino"], a: "Gallito de las Rocas" },
+            { q: "¿Qué clima predomina en la selva?", options: ["Seco", "Caluroso y lluvioso", "Nevado"], a: "Caluroso y lluvioso" },
+            { q: "¿Qué mamífero rosado vive en el río Amazonas?", options: ["Delfín rosado", "Ballena", "Tiburón"], a: "Delfín rosado" },
+            { q: "¿Qué medio de transporte se usa mucho en los ríos de la selva?", options: ["Tren", "Peque-peque (bote)", "Avión"], a: "Peque-peque (bote)" },
+            { q: "¿Qué animal felino es el rey de la selva peruana?", options: ["León", "Tigre", "Jaguar (Otorongo)"], a: "Jaguar (Otorongo)" },
+            { q: "¿Qué fruto de palmera es muy popular en la selva?", options: ["Manzana", "Aguaje", "Uva"], a: "Aguaje" },
+            { q: "¿Cuál es una ciudad muy importante de la selva peruana?", options: ["Iquitos", "Piura", "Tacna"], a: "Iquitos" }
+          ]
+        };
+
+        const FACTS = [
+          "¿Sabías que...? El Perú tiene tres grandes regiones: Costa, Sierra y Selva.",
+          "¿Sabías que...? La flor de la Cantuta es la flor nacional del Perú.",
+          "¿Sabías que...? El perro sin pelo del Perú es Patrimonio de la Nación.",
+          "¿Sabías que...? La lengua originaria más hablada en Perú es el Quechua.",
+          "¿Sabías que...? Caral es la ciudad más antigua de toda América.",
+          "¿Sabías que...? El oso de anteojos es el único oso nativo de Sudamérica.",
+          "¿Sabías que...? El cajón peruano nació en la costa y hoy se usa en todo el mundo.",
+          "¿Sabías que...? En Perú existen más de 3,000 variedades de papa.",
+          "¿Sabías que...? El Amazonas aporta el 20% del agua dulce de la Tierra.",
+          "¿Sabías que...? Las líneas de Nazca solo se pueden ver bien desde el aire."
+        ];
+
+        // --- FASES Y PROGRESIÓN LINEAL ---
+        const STAGES = [
+          { id: 'basico_1', parent: 'Básico', phase: 1, totalPhases: 3, qCount: 4, rows: 11, cols: 11, wall1: '#e0f2fe', wall2: '#bae6fd', icon: '❄️' }, 
+          { id: 'basico_2', parent: 'Básico', phase: 2, totalPhases: 3, qCount: 6, rows: 13, cols: 13, wall1: '#e0f2fe', wall2: '#bae6fd', icon: '❄️' }, 
+          { id: 'basico_3', parent: 'Básico', phase: 3, totalPhases: 3, qCount: 10, rows: 15, cols: 15, wall1: '#e0f2fe', wall2: '#bae6fd', icon: '❄️' }, 
+          { id: 'intermedio_1', parent: 'Intermedio', phase: 1, totalPhases: 3, qCount: 6, rows: 15, cols: 15, wall1: '#bae6fd', wall2: '#7dd3fc', icon: '🧊' }, 
+          { id: 'intermedio_2', parent: 'Intermedio', phase: 2, totalPhases: 3, qCount: 10, rows: 17, cols: 17, wall1: '#bae6fd', wall2: '#7dd3fc', icon: '🧊' }, 
+          { id: 'intermedio_3', parent: 'Intermedio', phase: 3, totalPhases: 3, qCount: 14, rows: 19, cols: 19, wall1: '#bae6fd', wall2: '#7dd3fc', icon: '🧊' }, 
+          { id: 'avanzado_1', parent: 'Avanzado', phase: 1, totalPhases: 3, qCount: 10, rows: 19, cols: 19, wall1: '#7dd3fc', wall2: '#38bdf8', icon: '🥶' }, 
+          { id: 'avanzado_2', parent: 'Avanzado', phase: 2, totalPhases: 3, qCount: 15, rows: 23, cols: 23, wall1: '#7dd3fc', wall2: '#38bdf8', icon: '🥶' }, 
+          { id: 'avanzado_3', parent: 'Avanzado', phase: 3, totalPhases: 3, qCount: 25, rows: 27, cols: 27, wall1: '#7dd3fc', wall2: '#38bdf8', icon: '🥶' }, 
+          { id: 'costa', parent: 'Mundo Costa', phase: 1, totalPhases: 1, qCount: 10, rows: 15, cols: 15, wall1: '#f59e0b', wall2: '#d97706', icon: '☀️' }, 
+          { id: 'sierra', parent: 'Mundo Sierra', phase: 1, totalPhases: 1, qCount: 10, rows: 15, cols: 15, wall1: '#8b4513', wall2: '#a0522d', icon: '🏔️' }, 
+          { id: 'selva', parent: 'Mundo Selva', phase: 1, totalPhases: 1, qCount: 10, rows: 15, cols: 15, wall1: '#15803d', wall2: '#166534', icon: '🌴' }  
+        ];
+
+        // GENERADOR DE LABERINTOS PROCEDURAL
+        const generateRandomMaze = (rows, cols) => {
+          const grid = Array.from({ length: rows }, () => Array(cols).fill(1));
+          const dirs = [{ r: -2, c: 0 }, { r: 2, c: 0 }, { r: 0, c: -2 }, { r: 0, c: 2 }];
+
+          const carve = (r, c) => {
+            grid[r][c] = 0;
+            const shuffledDirs = [...dirs].sort(() => Math.random() - 0.5);
+            for (let d of shuffledDirs) {
+              const nr = r + d.r;
+              const nc = c + d.c;
+              if (nr > 0 && nr < rows - 1 && nc > 0 && nc < cols - 1 && grid[nr][nc] === 1) {
+                grid[r + d.r / 2][c + d.c / 2] = 0; 
+                carve(nr, nc);
+              }
+            }
+          };
+
+          carve(1, 1);
+
+          const loops = Math.floor((rows * cols) / 10);
+          for (let i = 0; i < loops; i++) {
+            let r = 1 + Math.floor(Math.random() * (rows - 2));
+            let c = 1 + Math.floor(Math.random() * (cols - 2));
+            if (grid[r][c] === 1) {
+              if ((grid[r][c-1] === 0 && grid[r][c+1] === 0) || (grid[r-1] && grid[r-1][c] === 0 && grid[r+1] && grid[r+1][c] === 0)) {
+                grid[r][c] = 0;
+              }
+            }
+          }
+
+          grid[1][1] = 0; grid[1][2] = 0; grid[2][1] = 0;
+          
+          for(let i = 0; i < 4; i++) {
+            grid[rows-2][cols-2-i] = 0;
+            grid[rows-3][cols-2-i] = 0;
+          }
+
+          return grid;
+        };
+
+        // --- SISTEMA DE SONIDO ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const playSound = (type) => {
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+
+          const now = audioCtx.currentTime;
+          if (type === 'coin') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+          } else if (type === 'win') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(440, now);
+            osc.frequency.setValueAtTime(554, now + 0.1);
+            osc.frequency.setValueAtTime(659, now + 0.2);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.4);
+            osc.start(now);
+            osc.stop(now + 0.4);
+          } else if (type === 'lose') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.exponentialRampToValueAtTime(100, now + 0.3);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.3);
+            osc.start(now);
+            osc.stop(now + 0.3);
+          } else if (type === 'freeze') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(600, now);
+            osc.frequency.linearRampToValueAtTime(200, now + 0.3);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.3);
+            osc.start(now);
+            osc.stop(now + 0.3);
+          }
+        };
+
+        // --- COMPONENTE PRINCIPAL ---
+        function App() {
+          const [screen, setScreen] = useState('START'); 
+          const [playerName, setPlayerName] = useState('');
+          const [world, setWorld] = useState(null);
+          
+          const [score, setScore] = useState(0);
+          const [stageIndex, setStageIndex] = useState(0);
+          const [lives, setLives] = useState(3);
+          const [isPaused, setIsPaused] = useState(false);
+          const [showInstructions, setShowInstructions] = useState(false);
+          
+          const [currentQuestion, setCurrentQuestion] = useState(null);
+          const [currentFact, setCurrentFact] = useState('');
+          
+          const canvasRef = useRef(null);
+          const requestRef = useRef();
+          const activePoolRef = useRef([]);
+
+          const gameRef = useRef({
+            grid: [],
+            player: { x: 1, y: 1, dirX: 0, dirY: 0, screenX: 1, screenY: 1 },
+            activeDir: { x: 0, y: 0 },
+            ghosts: [],
+            itemsTotal: 0,
+            itemsCollected: 0,
+            mapSpawned: false,
+            lastTick: 0,
+            lastPlayerMoveTick: 0,
+            lastGhostTick: 0,
+            ghostsFrozenUntil: 0,
+            pendingQuestionIndex: null, 
+            cellSize: 30
+          });
+
+          const initLevel = useCallback((stgIdx) => {
+            const stageInfo = STAGES[stgIdx];
+            const rows = stageInfo.rows;
+            const cols = stageInfo.cols;
+            const grid = generateRandomMaze(rows, cols);
+            
+            let pool = [];
+            if (stgIdx <= 8) {
+               pool = [...QUESTIONS[world]]; 
+            } else {
+               pool = [...QUESTIONS[stageInfo.id]]; 
+            }
+            
+            pool.sort(() => Math.random() - 0.5);
+            activePoolRef.current = pool.slice(0, stageInfo.qCount);
+
+            let placed = 0;
+            while (placed < stageInfo.qCount) {
+              const r = 1 + Math.floor(Math.random() * (rows - 2));
+              const c = 1 + Math.floor(Math.random() * (cols - 2));
+              if (grid[r][c] === 0 && !(r <= 2 && c <= 2) && !(r >= rows-3 && c >= cols-5)) {
+                grid[r][c] = 2;
+                placed++;
+              }
+            }
+
+            const ghosts = [];
+            const numGhosts = Math.min(2 + Math.floor(stgIdx / 2), 5); 
+            for (let i = 0; i < numGhosts; i++) {
+              const homeX = cols - 2 - (i % 3);
+              const homeY = rows - 2 - Math.floor(i / 3);
+              ghosts.push({ x: homeX, y: homeY, screenX: homeX, screenY: homeY, homeX, homeY, dirX: -1, dirY: 0 });
+            }
+
+            gameRef.current = {
+              ...gameRef.current,
+              grid,
+              player: { x: 1, y: 1, dirX: 0, dirY: 0, screenX: 1, screenY: 1 },
+              activeDir: { x: 0, y: 0 },
+              ghosts,
+              itemsTotal: stageInfo.qCount,
+              itemsCollected: 0,
+              mapSpawned: false,
+              ghostsFrozenUntil: 0,
+              pendingQuestionIndex: null
+            };
+          }, [world]);
+
+          // Controles
+          useEffect(() => {
+            const handleKeyDown = (e) => {
+              if (screen !== 'PLAY' || isPaused) return;
+              let dx = 0, dy = 0;
+              switch (e.key) {
+                case 'ArrowUp': case 'w': case 'W': dy = -1; break;
+                case 'ArrowDown': case 's': case 'S': dy = 1; break;
+                case 'ArrowLeft': case 'a': case 'A': dx = -1; break;
+                case 'ArrowRight': case 'd': case 'D': dx = 1; break;
+                default: return;
+              }
+              e.preventDefault();
+              const current = gameRef.current.activeDir;
+              if (current.x !== dx || current.y !== dy) {
+                gameRef.current.activeDir = { x: dx, y: dy };
+                gameRef.current.lastPlayerMoveTick = 0; 
+              }
+            };
+
+            const handleKeyUp = (e) => {
+              let dx = 0, dy = 0;
+              switch (e.key) {
+                case 'ArrowUp': case 'w': case 'W': dy = -1; break;
+                case 'ArrowDown': case 's': case 'S': dy = 1; break;
+                case 'ArrowLeft': case 'a': case 'A': dx = -1; break;
+                case 'ArrowRight': case 'd': case 'D': dx = 1; break;
+                default: return;
+              }
+              const current = gameRef.current.activeDir;
+              if (current.x === dx && current.y === dy) {
+                gameRef.current.activeDir = { x: 0, y: 0 };
+              }
+            };
+
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            return () => {
+              window.removeEventListener('keydown', handleKeyDown);
+              window.removeEventListener('keyup', handleKeyUp);
+            };
+          }, [screen, isPaused]);
+
+          const handleTouchStart = (dx, dy) => {
+            if (screen !== 'PLAY' || isPaused) return;
+            gameRef.current.activeDir = { x: dx, y: dy };
+            gameRef.current.lastPlayerMoveTick = 0;
+          };
+
+          const handleTouchEnd = (dx, dy) => {
+            const current = gameRef.current.activeDir;
+            if (current.x === dx && current.y === dy) {
+              gameRef.current.activeDir = { x: 0, y: 0 };
+            }
+          };
+
+          // Motor Principal
+          const gameLoop = useCallback((time) => {
+            if (screen !== 'PLAY' || isPaused) {
+              requestRef.current = requestAnimationFrame(gameLoop);
+              return;
+            }
+
+            const state = gameRef.current;
+            const dtGhost = time - state.lastGhostTick;
+
+            const playerMoveInterval = 160; 
+            const ghostMoveInterval = 500 - (stageIndex * 15);
+
+            // Movimiento Jugador
+            if ((state.activeDir.x !== 0 || state.activeDir.y !== 0) && (time - state.lastPlayerMoveTick > playerMoveInterval)) {
+              state.lastPlayerMoveTick = time;
+
+              let { player, grid } = state;
+              const dx = state.activeDir.x;
+              const dy = state.activeDir.y;
+              
+              player.dirX = dx;
+              player.dirY = dy;
+
+              let newPx = player.x + dx;
+              let newPy = player.y + dy;
+              
+              if (grid[newPy]?.[newPx] !== 1) {
+                player.x = newPx;
+                player.y = newPy;
+                player.screenX = newPx;
+                player.screenY = newPy;
+              }
+
+              const cell = grid[player.y][player.x];
+              if (cell === 2) {
+                playSound('coin');
+                grid[player.y][player.x] = 0;
+                
+                const randomIndex = Math.floor(Math.random() * activePoolRef.current.length);
+                const selectedQ = activePoolRef.current[randomIndex];
+                state.pendingQuestionIndex = randomIndex; 
+
+                const options = [...selectedQ.options].sort(() => Math.random() - 0.5);
+                setCurrentQuestion({ ...selectedQ, options });
+                setScreen('QUESTION');
+              }
+
+              if (cell === 3) {
+                playSound('win');
+                setCurrentFact(FACTS[Math.floor(Math.random() * FACTS.length)]);
+                setScreen('FACT');
+              }
+
+              if (state.itemsCollected >= state.itemsTotal && !state.mapSpawned) {
+                state.mapSpawned = true;
+                for (let r = Math.floor(grid.length/2); r < grid.length; r++) {
+                  let placed = false;
+                  for (let c = Math.floor(grid[0].length/2); c < grid[0].length; c++) {
+                    if (grid[r][c] === 0 && (r !== player.y || c !== player.x)) {
+                      grid[r][c] = 3;
+                      placed = true; break;
+                    }
+                  }
+                  if (placed) break;
+                }
+              }
+            }
+
+            // Movimiento Fantasmas
+            if (dtGhost > ghostMoveInterval) {
+              state.lastGhostTick = time;
+              const now = performance.now();
+              const isFrozen = now < state.ghostsFrozenUntil;
+
+              if (!isFrozen) {
+                let { player, grid, ghosts } = state;
+                
+                ghosts.forEach(ghost => {
+                  const dirs = [
+                    {x: 0, y: -1}, {x: 0, y: 1}, {x: -1, y: 0}, {x: 1, y: 0}
+                  ].filter(d => grid[ghost.y + d.y]?.[ghost.x + d.x] !== 1);
+
+                  if (dirs.length > 0) {
+                    const forwardDirs = dirs.filter(d => !(d.x === -ghost.dirX && d.y === -ghost.dirY));
+                    const moveDir = (forwardDirs.length > 0) 
+                      ? forwardDirs[Math.floor(Math.random() * forwardDirs.length)]
+                      : dirs[Math.floor(Math.random() * dirs.length)];
+                    
+                    ghost.dirX = moveDir.x;
+                    ghost.dirY = moveDir.y;
+                    ghost.x += ghost.dirX;
+                    ghost.y += ghost.dirY;
+                    ghost.screenX = ghost.x;
+                    ghost.screenY = ghost.y;
+                  }
+
+                  if (ghost.x === player.x && ghost.y === player.y) {
+                    playSound('lose');
+                    if (lives > 1) {
+                      setLives(l => l - 1);
+                      player.x = 1; player.y = 1;
+                      player.screenX = 1; player.screenY = 1;
+                    } else {
+                      setScreen('GAMEOVER');
+                    }
+                  }
+                });
+              }
+            }
+
+            const { player, ghosts } = state;
+            if (performance.now() > state.ghostsFrozenUntil) {
+               for (let ghost of ghosts) {
+                 if (ghost.x === player.x && ghost.y === player.y) {
+                    playSound('lose');
+                    if (lives > 1) {
+                      setLives(l => l - 1);
+                      player.x = 1; player.y = 1;
+                      player.screenX = 1; player.screenY = 1;
+                    } else {
+                      setScreen('GAMEOVER');
+                    }
+                    break;
+                 }
+               }
+            }
+
+            // --- RENDERIZADO ---
+            const canvas = canvasRef.current;
+            if (canvas) {
+              const ctx = canvas.getContext('2d');
+              const { grid, cellSize } = state;
+              const now = performance.now();
+              const isFrozen = now < state.ghostsFrozenUntil;
+              const stageInfo = STAGES[stageIndex];
+              
+              canvas.width = grid[0].length * cellSize;
+              canvas.height = grid.length * cellSize;
+
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+              for (let r = 0; r < grid.length; r++) {
+                for (let c = 0; c < grid[r].length; c++) {
+                  const val = grid[r][c];
+                  if (val === 1) {
+                    ctx.fillStyle = stageInfo.wall1;
+                    ctx.beginPath();
+                    ctx.roundRect(c * cellSize + 1, r * cellSize + 1, cellSize - 2, cellSize - 2, 6);
+                    ctx.fill();
+                    ctx.fillStyle = stageInfo.wall2;
+                    ctx.beginPath();
+                    ctx.arc(c * cellSize + 8, r * cellSize + 8, 3, 0, Math.PI * 2);
+                    ctx.arc(c * cellSize + 18, r * cellSize + 18, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                  } else if (val === 2) {
+                    ctx.font = `${cellSize * 0.6}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('❓', c * cellSize + cellSize/2, r * cellSize + cellSize/2 + 2);
+                  } else if (val === 3) {
+                    ctx.font = `${cellSize * 0.7}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('🗺️', c * cellSize + cellSize/2, r * cellSize + cellSize/2 + 2);
+                  }
+                }
+              }
+
+              ctx.fillStyle = '#fbbf24';
+              ctx.beginPath();
+              const px = player.screenX * cellSize + cellSize/2;
+              const py = player.screenY * cellSize + cellSize/2;
+              
+              const mouthAngle = 0.2 * Math.PI * Math.abs(Math.sin(time / 150));
+              let startAngle = mouthAngle;
+              let endAngle = 2 * Math.PI - mouthAngle;
+              
+              if (player.dirX === -1) { startAngle += Math.PI; endAngle += Math.PI; }
+              else if (player.dirY === -1) { startAngle -= Math.PI/2; endAngle -= Math.PI/2; }
+              else if (player.dirY === 1) { startAngle += Math.PI/2; endAngle += Math.PI/2; }
+
+              ctx.arc(px, py, cellSize/2 - 4, startAngle, endAngle);
+              ctx.lineTo(px, py);
+              ctx.fill();
+              
+              ctx.fillStyle = 'black';
+              ctx.beginPath();
+              ctx.arc(px, py - 6, 2, 0, Math.PI*2);
+              ctx.fill();
+
+              ghosts.forEach(ghost => {
+                ctx.font = `${cellSize * 0.8}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const gx = ghost.screenX * cellSize + cellSize/2;
+                const gy = ghost.screenY * cellSize + cellSize/2;
+                ctx.fillText(isFrozen ? '🥶' : '👻', gx, gy + 2);
+              });
+            }
+
+            requestRef.current = requestAnimationFrame(gameLoop);
+          }, [screen, isPaused, stageIndex, lives]);
+
+          useEffect(() => {
+            requestRef.current = requestAnimationFrame(gameLoop);
+            return () => cancelAnimationFrame(requestRef.current);
+          }, [gameLoop]);
+
+          const handleAnswer = (ans) => {
+            if (ans === currentQuestion.a) {
+              playSound('freeze'); 
+              setScore(s => s + 50);
+              
+              activePoolRef.current.splice(gameRef.current.pendingQuestionIndex, 1);
+              gameRef.current.itemsCollected++;
+
+              gameRef.current.ghostsFrozenUntil = performance.now() + 7000;
+              gameRef.current.ghosts.forEach(g => {
+                g.x = g.homeX; g.y = g.homeY; g.screenX = g.homeX; g.screenY = g.homeY;
+              });
+
+            } else {
+              playSound('lose');
+              setScore(s => Math.max(0, s - 10)); 
+              
+              const grid = gameRef.current.grid;
+              const { player } = gameRef.current;
+              const emptyCells = [];
+              for (let r=1; r<grid.length-1; r++) {
+                for (let c=1; c<grid[0].length-1; c++) {
+                   if (grid[r][c] === 0 && !(r === player.y && c === player.x)) {
+                      emptyCells.push({r, c});
+                   }
+                }
+              }
+              if (emptyCells.length > 0) {
+                 const spot = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+                 grid[spot.r][spot.c] = 2; 
+              }
+            }
+            
+            setScreen('PLAY');
+            setCurrentQuestion(null);
+          };
+
+          const handleNextLevel = () => {
+            if (stageIndex < STAGES.length - 1) {
+              setStageIndex(l => l + 1);
+              initLevel(stageIndex + 1);
+              setScreen('PLAY');
+            } else {
+              setScreen('VICTORY');
+            }
+          };
+
+          const startGame = (stgIdx) => {
+            setScore(0);
+            setStageIndex(stgIdx);
+            setLives(3);
+            initLevel(stgIdx);
+            setScreen('PLAY');
+          };
+
+          const captureScreen = () => {
+            const w = 1920;
+            const h = 1080;
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = w;
+            offCanvas.height = h;
+            const ctx = offCanvas.getContext('2d');
+
+            const gradient = ctx.createLinearGradient(0, 0, w, h);
+            gradient.addColorStop(0, '#1e3a8a');
+            gradient.addColorStop(1, '#3b82f6');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, w, h);
+
+            ctx.fillStyle = 'rgba(255,255,255,0.05)';
+            ctx.beginPath(); ctx.arc(300, 200, 150, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(1600, 800, 250, 0, Math.PI*2); ctx.fill();
+
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = 'bold 70px Arial';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 10;
+            ctx.fillText('AIVA: Academia de Exploradores', w/2, 100);
+            ctx.fillStyle = 'white';
+            ctx.font = 'italic 40px Arial';
+            ctx.fillText(`Especialidad: ${world === 'matematicas' ? 'Matemáticas 🧮' : 'Comunicación 📚'}`, w/2, 160);
+            ctx.shadowColor = 'transparent';
+
+            const gameCanvas = canvasRef.current;
+            if (gameCanvas) {
+              const scale = Math.min(1100 / gameCanvas.width, 700 / gameCanvas.height);
+              const gw = gameCanvas.width * scale;
+              const gh = gameCanvas.height * scale;
+              
+              const gx = 100 + (1100 - gw) / 2;
+              const gy = 220 + (700 - gh) / 2;
+
+              ctx.fillStyle = '#0f172a'; 
+              ctx.beginPath(); // CORRECCIÓN CLAVE
+              ctx.roundRect(gx - 20, gy - 20, gw + 40, gh + 40, 20);
+              ctx.fill();
+              ctx.drawImage(gameCanvas, gx, gy, gw, gh);
+            }
+
+            ctx.fillStyle = 'white';
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 20;
+            ctx.shadowOffsetY = 10;
+            ctx.beginPath(); // CORRECCIÓN CLAVE
+            ctx.roundRect(1300, 220, 550, 500, 30); 
+            ctx.fill();
+            ctx.shadowColor = 'transparent';
+
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#1e40af';
+            ctx.font = 'bold 45px Arial';
+            ctx.fillText('🎓 DIPLOMA 🎓', 1575, 300);
+            
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 35px Arial';
+            ctx.fillText(`Explorador:`, 1575, 380);
+            ctx.font = '35px Arial';
+            ctx.fillText(`${playerName}`, 1575, 430);
+            
+            ctx.font = 'bold 35px Arial';
+            ctx.fillText(`Nivel Alcanzado:`, 1575, 500);
+            ctx.font = '35px Arial';
+            ctx.fillText(`${STAGES[stageIndex].parent} (Fase ${STAGES[stageIndex].phase})`, 1575, 550);
+            
+            ctx.fillStyle = '#16a34a';
+            ctx.font = 'bold 50px Arial';
+            ctx.fillText(`Puntos: ${score}`, 1575, 650);
+
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.font = '30px Arial';
+            ctx.fillText('¡Juega y aprende en AIVA!', w/2, h - 40);
+
+            const dataUrl = offCanvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `Logro_AIVA_${playerName}.png`;
+            link.href = dataUrl;
+            link.click();
+          };
+
+          if (screen === 'START') {
+            return (
+              <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-900 to-purple-800 p-6 text-center">
+                <div className="bg-white/10 p-8 rounded-3xl shadow-2xl backdrop-blur-sm max-w-md w-full border border-white/20">
+                  <span className="text-7xl block mb-4">🏆</span>
+                  <h1 className="text-4xl font-black mb-2 tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-400">
+                    AIVA
+                  </h1>
+                  <h2 className="text-2xl font-bold mb-6">Laberinto del Saber</h2>
+                  <p className="mb-6 text-blue-100">Ingresa tu nombre para comenzar tu aventura:</p>
+                  <input
+                    type="text"
+                    className="w-full p-4 rounded-xl text-black text-xl font-bold text-center mb-6 focus:outline-none focus:ring-4 focus:ring-yellow-400 transition-all"
+                    placeholder="Tu nombre aquí..."
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    maxLength={15}
+                  />
+                  <div className="flex flex-col gap-3">
+                    <button
+                      onClick={() => playerName.trim() && setScreen('WORLD_SELECT')}
+                      disabled={!playerName.trim()}
+                      className="w-full bg-yellow-400 hover:bg-yellow-300 text-yellow-900 font-bold text-xl py-4 rounded-xl disabled:opacity-50 transition-transform active:scale-95 shadow-lg"
+                    >
+                      Siguiente ➡️
+                    </button>
+                    <button
+                      onClick={() => setScreen('INSTRUCTIONS')}
+                      className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg py-3 rounded-xl transition-transform active:scale-95 shadow-lg flex items-center justify-center gap-2"
+                    >
+                      <Info /> ¿Cómo jugar?
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if (screen === 'INSTRUCTIONS') {
+            return (
+              <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-900 to-purple-800 p-6 text-center">
+                <h2 className="text-4xl font-black mb-6">📖 Instrucciones</h2>
+                <div className="bg-white/10 p-8 rounded-3xl shadow-2xl backdrop-blur-sm max-w-2xl w-full text-left text-lg space-y-6 border border-white/20">
+                  <p className="flex items-center gap-3">🎮 <span><b>Muévete</b> por el laberinto usando las flechas de tu teclado, las teclas <b>WASD</b>, o tocando los botones en la pantalla del celular. Mantén presionado para correr.</span></p>
+                  <p className="flex items-center gap-3">❓ <span><b>Responde Preguntas:</b> Recoge los símbolos de interrogación. Si te equivocas, ¡la pregunta volverá a aparecer en otro lado del laberinto para que lo intentes de nuevo!</span></p>
+                  <p className="flex items-center gap-3">🥶 <span><b>Fantasmas:</b> ¡Huye de ellos! Pero si respondes una pregunta correctamente, los asustarás y se congelarán en su casa por 7 segundos.</span></p>
+                  <p className="flex items-center gap-3">🗺️ <span><b>El Mapa:</b> Responde todas las preguntas de la fase para que aparezca el mapa. Recógelo para ganar.</span></p>
+                </div>
+                <button 
+                  onClick={() => setScreen('START')} 
+                  className="mt-8 bg-yellow-400 hover:bg-yellow-300 text-yellow-900 font-bold text-xl py-4 px-12 rounded-xl active:scale-95 shadow-lg"
+                >
+                  ¡Entendido! Volver
+                </button>
+              </div>
+            );
+          }
+
+          if (screen === 'WORLD_SELECT') {
+            return (
+              <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-900 to-blue-800 p-6 text-center">
+                <h2 className="text-3xl font-black mb-8">¡Hola, {playerName}!</h2>
+                <p className="text-xl mb-8">¿Qué tema deseas practicar hoy?</p>
+                
+                <div className="flex flex-col md:flex-row gap-6 w-full max-w-2xl">
+                  <button 
+                    onClick={() => { setWorld('matematicas'); setScreen('DIFF_SELECT'); }}
+                    className="flex-1 bg-gradient-to-b from-red-500 to-red-700 p-8 rounded-3xl shadow-xl hover:-translate-y-2 transition-transform border-4 border-red-400 group"
+                  >
+                    <span className="text-7xl block mb-4">🧮</span>
+                    <h3 className="text-3xl font-bold">Matemáticas</h3>
+                  </button>
+
+                  <button 
+                    onClick={() => { setWorld('comunicacion'); setScreen('DIFF_SELECT'); }}
+                    className="flex-1 bg-gradient-to-b from-green-500 to-green-700 p-8 rounded-3xl shadow-xl hover:-translate-y-2 transition-transform border-4 border-green-400 group"
+                  >
+                    <span className="text-7xl block mb-4">📖</span>
+                    <h3 className="text-3xl font-bold">Comunicación</h3>
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          if (screen === 'DIFF_SELECT') {
+            return (
+              <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-900 to-purple-800 p-6 text-center">
+                <h2 className="text-3xl font-black mb-4">Elige tu nivel</h2>
+                <p className="text-lg mb-8 text-blue-200">¡Si superas el nivel Avanzado desbloquearás los mundos mágicos del Perú!</p>
+                
+                <div className="flex flex-col gap-4 w-full max-w-md">
+                  <button onClick={() => startGame(0)} className="bg-green-500 hover:bg-green-600 p-4 rounded-2xl shadow-lg border-2 border-green-300 flex justify-between items-center text-xl font-bold active:scale-95 transition-transform">
+                    <span>🌱 Nivel Básico</span> <span className="text-sm bg-green-700 px-3 py-1 rounded-full">20 Preguntas</span>
+                  </button>
+                  <button onClick={() => startGame(3)} className="bg-yellow-500 hover:bg-yellow-600 p-4 rounded-2xl shadow-lg border-2 border-yellow-300 flex justify-between items-center text-xl font-bold active:scale-95 transition-transform">
+                    <span>🌿 Nivel Intermedio</span> <span className="text-sm bg-yellow-700 px-3 py-1 rounded-full">30 Preguntas</span>
+                  </button>
+                  <button onClick={() => startGame(6)} className="bg-red-500 hover:bg-red-600 p-4 rounded-2xl shadow-lg border-2 border-red-300 flex justify-between items-center text-xl font-bold active:scale-95 transition-transform">
+                    <span>🌳 Nivel Avanzado</span> <span className="text-sm bg-red-700 px-3 py-1 rounded-full">50 Preguntas</span>
+                  </button>
+                </div>
+
+                <div className="mt-8 opacity-50 flex gap-4 text-sm font-bold flex-wrap justify-center">
+                  <div className="bg-slate-800 p-3 rounded-xl flex items-center gap-2">☀️ Costa (Bloqueado)</div>
+                  <div className="bg-slate-800 p-3 rounded-xl flex items-center gap-2">🏔️ Sierra (Bloqueado)</div>
+                  <div className="bg-slate-800 p-3 rounded-xl flex items-center gap-2">🌴 Selva (Bloqueado)</div>
+                </div>
+              </div>
+            );
+          }
+
+          const currentStageInfo = STAGES[stageIndex];
+
+          return (
+            <div className="flex flex-col h-screen select-none">
+              <div className="flex justify-between items-center p-4 bg-slate-800 border-b-4 border-slate-700 z-10">
+                <div className="flex flex-col">
+                  <span className="font-bold text-yellow-400 text-lg">{playerName}</span>
+                  <span className="text-sm text-slate-300">
+                    {currentStageInfo.icon} {currentStageInfo.parent} (Fase {currentStageInfo.phase}/{currentStageInfo.totalPhases})
+                  </span>
+                </div>
+                
+                <div className="flex gap-2 text-2xl">
+                   {[...Array(3)].map((_, i) => (
+                     <span key={i} className={i < lives ? 'text-red-500' : 'text-slate-600 opacity-50'}>❤️</span>
+                   ))}
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <span className="block text-xs text-slate-400">PUNTOS</span>
+                    <span className="block font-black text-xl">{score}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setShowInstructions(true); setIsPaused(true); }} className="bg-blue-600 p-3 rounded-full hover:bg-blue-500 active:scale-90 text-white">
+                      <Info />
+                    </button>
+                    <button onClick={() => setIsPaused(!isPaused)} className="bg-slate-700 p-3 rounded-full hover:bg-slate-600 active:scale-90 text-white">
+                      {isPaused ? <Play /> : <Pause />}
+                    </button>
+                    <button onClick={() => setScreen('QUIT')} className="bg-red-600 p-3 rounded-full hover:bg-red-500 active:scale-90 text-white">
+                      <LogOut />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 relative flex items-center justify-center p-2 overflow-hidden bg-slate-900">
+                <canvas 
+                  ref={canvasRef} 
+                  className="bg-slate-800 rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.5)] border-4 border-slate-700 max-w-full max-h-full object-contain"
+                />
+
+                {showInstructions && screen === 'PLAY' && (
+                  <div className="absolute inset-0 bg-indigo-900/95 backdrop-blur-md flex flex-col items-center justify-center p-6 z-50">
+                    <h2 className="text-4xl font-black mb-6 text-white">📖 Instrucciones</h2>
+                    <div className="bg-white/10 p-6 rounded-3xl shadow-2xl max-w-2xl w-full text-left text-lg space-y-4 border border-white/20 text-white">
+                      <p className="flex items-center gap-3">🎮 <span><b>Muévete:</b> Usa flechas, teclas <b>WASD</b> o botones en pantalla. Mantén para correr.</span></p>
+                      <p className="flex items-center gap-3">❓ <span><b>Responde:</b> Atrapa las preguntas. ¡Si fallas, reaparecen!</span></p>
+                      <p className="flex items-center gap-3">🥶 <span><b>Fantasmas:</b> ¡Huye! Si aciertas una pregunta, se congelan por 7 segundos.</span></p>
+                      <p className="flex items-center gap-3">🗺️ <span><b>Mapa:</b> Responde todo para que aparezca y avanza a la siguiente fase.</span></p>
+                    </div>
+                    <button 
+                      onClick={() => { setShowInstructions(false); setIsPaused(false); }} 
+                      className="mt-8 bg-yellow-400 hover:bg-yellow-300 text-yellow-900 font-bold text-xl py-4 px-12 rounded-xl active:scale-95 shadow-lg"
+                    >
+                      ¡Continuar Explorando!
+                    </button>
+                  </div>
+                )}
+
+                {isPaused && screen === 'PLAY' && !showInstructions && (
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                    <div className="text-4xl font-black tracking-widest text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">PAUSA</div>
+                  </div>
+                )}
+
+                {screen === 'QUESTION' && currentQuestion && (
+                  <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-20">
+                    <div className="bg-white text-slate-900 p-8 rounded-3xl max-w-md w-full text-center shadow-2xl">
+                      <div className="bg-yellow-400 w-16 h-16 rounded-full flex items-center justify-center mx-auto -mt-16 mb-6 border-4 border-white shadow-lg">
+                        <span className="text-3xl">❓</span>
+                      </div>
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Faltan responder: {gameRef.current.itemsTotal - gameRef.current.itemsCollected}</p>
+                      <h2 className="text-2xl font-bold mb-6">{currentQuestion.q}</h2>
+                      <div className="flex flex-col gap-3">
+                        {currentQuestion.options.map((opt, idx) => (
+                          <button key={idx} onClick={() => handleAnswer(opt)} className="bg-blue-100 hover:bg-blue-500 hover:text-white text-blue-900 font-bold text-xl py-4 rounded-xl transition-colors active:scale-95">
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {screen === 'FACT' && (
+                  <div className="absolute inset-0 bg-blue-900/90 backdrop-blur-md flex flex-col items-center justify-center p-6 z-30">
+                    <div className="bg-white text-slate-900 p-8 rounded-3xl max-w-md w-full text-center shadow-2xl relative">
+                      <span className="text-6xl absolute -top-8 left-1/2 -translate-x-1/2">💡</span>
+                      <h2 className="text-2xl font-black mt-6 mb-2 text-blue-800">¡Fase Completada!</h2>
+                      <p className="text-sm font-bold text-slate-500 uppercase mb-4">Has superado la fase {currentStageInfo.phase} de {currentStageInfo.totalPhases}.</p>
+                      {stageIndex === 8 && <p className="text-green-600 font-bold mb-4 animate-pulse">🌟 ¡Has desbloqueado los Mundos del Perú! 🌟</p>}
+                      <p className="text-lg mb-8 font-medium leading-relaxed">{currentFact}</p>
+                      <button onClick={handleNextLevel} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold text-xl py-4 rounded-xl active:scale-95">
+                        Siguiente Laberinto 🚀
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {screen === 'GAMEOVER' && (
+                  <div className="absolute inset-0 bg-red-900/90 flex flex-col items-center justify-center p-6 z-30">
+                    <div className="text-center">
+                      <span className="text-8xl mb-4 block">👻</span>
+                      <h2 className="text-5xl font-black text-white mb-2">¡Oh no!</h2>
+                      <p className="text-2xl text-red-200 mb-8">Te atraparon los fantasmas</p>
+                      <div className="bg-white/10 p-6 rounded-2xl mb-8 border border-white/20">
+                        <p className="text-xl">Puntaje Final: <strong className="text-yellow-400 text-3xl block">{score}</strong></p>
+                        <p className="text-md text-slate-300 mt-2">Llegaste a: {currentStageInfo.parent} (Fase {currentStageInfo.phase})</p>
+                      </div>
+                      <div className="flex gap-4 justify-center">
+                        <button onClick={() => setScreen('WORLD_SELECT')} className="bg-white text-red-900 font-bold px-8 py-4 rounded-full flex items-center gap-2 hover:bg-red-100">
+                          🔄 Volver a Jugar
+                        </button>
+                        <button onClick={captureScreen} className="bg-blue-500 text-white font-bold px-8 py-4 rounded-full flex items-center gap-2 hover:bg-blue-600">
+                          📸 Guardar Logro
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {screen === 'QUIT' && (
+                  <div className="absolute inset-0 bg-blue-900/90 flex flex-col items-center justify-center p-6 z-30">
+                    <div className="text-center">
+                      <span className="text-8xl mb-4 block">👋</span>
+                      <h2 className="text-5xl font-black text-white mb-2">¡Buen trabajo!</h2>
+                      <p className="text-2xl text-blue-200 mb-8">Decidiste terminar la exploración</p>
+                      <div className="bg-white/10 p-6 rounded-2xl mb-8 border border-white/20">
+                        <p className="text-xl">Puntaje Actual: <strong className="text-yellow-400 text-3xl block">{score}</strong></p>
+                        <p className="text-md text-slate-300 mt-2">Alcanzaste: {currentStageInfo.parent} (Fase {currentStageInfo.phase})</p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                        <button onClick={() => setScreen('WORLD_SELECT')} className="bg-white text-blue-900 font-bold px-8 py-4 rounded-full flex items-center justify-center gap-2 hover:bg-blue-100">
+                          🔄 Menú
+                        </button>
+                        <button onClick={captureScreen} className="bg-green-500 text-white font-bold px-8 py-4 rounded-full flex items-center justify-center gap-2 hover:bg-green-600">
+                          📸 Guardar Logro
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {screen === 'VICTORY' && (
+                  <div className="absolute inset-0 bg-yellow-600/90 flex flex-col items-center justify-center p-6 z-30">
+                    <div className="text-center">
+                      <span className="text-8xl mb-4 block animate-bounce">🏆</span>
+                      <h2 className="text-5xl font-black text-white mb-2">¡Misión Cumplida!</h2>
+                      <p className="text-2xl text-yellow-100 mb-8">Has recorrido todo el Perú y superado los retos.</p>
+                      <div className="bg-white/20 p-6 rounded-2xl mb-8 border border-white/30">
+                        <p className="text-xl">Puntaje Perfecto: <strong className="text-white text-4xl block">{score}</strong></p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                        <button onClick={() => setScreen('WORLD_SELECT')} className="bg-white text-yellow-900 font-bold px-8 py-4 rounded-full flex items-center justify-center gap-2 hover:bg-yellow-100">
+                          🔄 Nueva Aventura
+                        </button>
+                        <button onClick={captureScreen} className="bg-blue-600 text-white font-bold px-8 py-4 rounded-full flex items-center justify-center gap-2 hover:bg-blue-700">
+                          📸 Guardar Diploma
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-slate-800 p-6 pb-10 rounded-t-3xl border-t border-slate-700 flex justify-center lg:hidden">
+                <div className="grid grid-cols-3 gap-2 w-48 h-48">
+                  <div />
+                  <button onTouchStart={(e)=>{e.preventDefault(); handleTouchStart(0, -1);}} onTouchEnd={(e)=>{e.preventDefault(); handleTouchEnd(0, -1);}} onMouseDown={()=>handleTouchStart(0, -1)} onMouseUp={()=>handleTouchEnd(0, -1)} onMouseLeave={()=>handleTouchEnd(0, -1)} className="bg-slate-700 rounded-xl flex items-center justify-center active:bg-slate-500 shadow-inner">
+                    <ArrowUp />
+                  </button>
+                  <div />
+                  <button onTouchStart={(e)=>{e.preventDefault(); handleTouchStart(-1, 0);}} onTouchEnd={(e)=>{e.preventDefault(); handleTouchEnd(-1, 0);}} onMouseDown={()=>handleTouchStart(-1, 0)} onMouseUp={()=>handleTouchEnd(-1, 0)} onMouseLeave={()=>handleTouchEnd(-1, 0)} className="bg-slate-700 rounded-xl flex items-center justify-center active:bg-slate-500 shadow-inner">
+                    <ArrowLeft />
+                  </button>
+                  <div className="bg-slate-800 rounded-xl flex items-center justify-center"><div className="w-4 h-4 bg-slate-600 rounded-full"></div></div>
+                  <button onTouchStart={(e)=>{e.preventDefault(); handleTouchStart(1, 0);}} onTouchEnd={(e)=>{e.preventDefault(); handleTouchEnd(1, 0);}} onMouseDown={()=>handleTouchStart(1, 0)} onMouseUp={()=>handleTouchEnd(1, 0)} onMouseLeave={()=>handleTouchEnd(1, 0)} className="bg-slate-700 rounded-xl flex items-center justify-center active:bg-slate-500 shadow-inner">
+                    <ArrowRight />
+                  </button>
+                  <div />
+                  <button onTouchStart={(e)=>{e.preventDefault(); handleTouchStart(0, 1);}} onTouchEnd={(e)=>{e.preventDefault(); handleTouchEnd(0, 1);}} onMouseDown={()=>handleTouchStart(0, 1)} onMouseUp={()=>handleTouchEnd(0, 1)} onMouseLeave={()=>handleTouchEnd(0, 1)} className="bg-slate-700 rounded-xl flex items-center justify-center active:bg-slate-500 shadow-inner">
+                    <ArrowDown />
+                  </button>
+                  <div />
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
